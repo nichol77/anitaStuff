@@ -43,7 +43,7 @@ endif
 CXXFLAGS     += $(ROOTCFLAGS) $(FFTFLAG) $(SYSINCLUDES) $(INC_ANITA_UTIL)
 LDFLAGS      += -g $(ROOTLDFLAGS) 
 
-LIBS          = $(ROOTLIBS) -lMathMore -lMinuit -lGeom -lGraf3d $(SYSLIBS) $(LD_ANITA_UTIL) $(FFTLIBS)
+LIBS          = $(ROOTLIBS) -lMathMore -lMinuit -lGeom -lGraf3d $(SYSLIBS) $(LD_ANITA_UTIL) $(FFTLIBS)  -lAnitaEvent
 GLIBS         = $(ROOTGLIBS) $(SYSLIBS)
 
 #Now the bits we're actually compiling
@@ -52,7 +52,12 @@ LIB_OBJS = AnitaSimpleIntImageMaker.o anitaIntImageMakerDict.o
 CLASS_HEADERS = AnitaSimpleIntImageMaker.h
 
 
-all : $(ROOT_LIBRARY)
+all : $(ROOT_LIBRARY) makeIntImageFile
+
+
+makeIntImageFile : $(ROOT_LIBRARY) makeIntImageFile.$(SRCSUF)
+	@echo "<**Compiling**> "  
+	$(LD)  $(CXXFLAGS) $(LDFLAGS) makeIntImageFile.$(SRCSUF) $(ROOT_LIBRARY) $(LIBS) -o $@
 
 
 #The library

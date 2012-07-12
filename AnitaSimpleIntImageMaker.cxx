@@ -15,6 +15,7 @@ AnitaSimpleIntImageMaker::AnitaSimpleIntImageMaker()
 {
   //Default Constructor
   fillAntennaPositions();
+  fillAntennaPairs();
   fillDeltaTArrays();
 }
 

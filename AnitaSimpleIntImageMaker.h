@@ -24,6 +24,7 @@ class TH2D;
 
 class AnitaSimpleIntImageMaker : public TObject
 {
+ public:
   AnitaSimpleIntImageMaker(); /// Default constructor
   ~AnitaSimpleIntImageMaker(); // Default destructor
 
