@@ -89,6 +89,7 @@ void AnitaSimpleIntImageMaker::fillAntennaPairs()
   fPairsPerPhiSector=7;
   for(int phi=0;phi<PHI_SECTORS;phi++) {
     int leftPhi=(phi-1)%PHI_SECTORS;
+    if(leftPhi<0)leftPhi+=PHI_SECTORS;
     int rightPhi=(phi+1)%PHI_SECTORS;
     fPairList[phi][0]=phi;
     fPairList[phi][1]=leftPhi;
@@ -171,6 +172,7 @@ TH2D *AnitaSimpleIntImageMaker::getInterferometricMap(UsefulAnitaEvent *usefulEv
 
      
   for(int phiBin=0;phiBin<NUM_PHI_BINS;phiBin++) {
+    //    std::cout << "phiBin: " << phiBin << "\n";
     Int_t whichPhi=getPhiSector(fPhiWaveDeg[phiBin]);
     for(int thetaBin=0;thetaBin<NUM_THETA_BINS;thetaBin++) {
       //I think this is the correct equation to work out the bin number
@@ -179,6 +181,10 @@ TH2D *AnitaSimpleIntImageMaker::getInterferometricMap(UsefulAnitaEvent *usefulEv
       
       for(int pairInd=0;pairInd<fPairsPerPhiSector;pairInd++) {
 	Int_t whichPair=fPairList[whichPhi][pairInd];
+	if(whichPair == -1) {	  
+	  std::cout << phiBin << "\t" << thetaBin << "\t" << whichPhi << "\t" << pairInd << "\t" << whichPair << "\n";
+	  exit(0);
+	}
 	Double_t dt=fDeltaT[whichPair][phiBin][thetaBin];
 	Double_t corVal=fastEvalForEvenSampling(grCor[whichPair],dt);
 	corVal*=scale;
@@ -221,6 +227,7 @@ TGraph* AnitaSimpleIntImageMaker::getNormalisedGraph(TGraph *grIn)
 Double_t AnitaSimpleIntImageMaker::fastEvalForEvenSampling(TGraph *grIn, Double_t xvalue)
 {
   Int_t numPoints=grIn->GetN();
+  //  std::cout << numPoints << "\n";
   if(numPoints<2) return 0;
   Double_t *xVals=grIn->GetX();
   Double_t *yVals=grIn->GetY();
