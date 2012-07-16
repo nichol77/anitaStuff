@@ -2,8 +2,12 @@
 #include "AnitaGeomTool.h"
 #include "FFTtools.h"
 #include "TH2.h"
+#include "TFile.h"
 #include "TMath.h"
 #include <iostream>
+
+
+#define NOMINAL_SAMPLING (1./2.6)
 
 ClassImp(AnitaSimpleIntImageMaker);
 
@@ -14,6 +18,7 @@ AnitaSimpleIntImageMaker *AnitaSimpleIntImageMaker::fgInstance=0;
 AnitaSimpleIntImageMaker::AnitaSimpleIntImageMaker()
 {
   //Default Constructor
+  fPhiWidthDeg=35;
   fillAntennaPositions();
   fillAntennaPairs();
   fillDeltaTArrays();
@@ -83,6 +88,48 @@ void AnitaSimpleIntImageMaker::fillAntennaPairs()
   }
 
   fNumPairs=pairIndex;
+  for(int i=0;i<fNumPairs;i++) {
+    Double_t fPhiDiff=fGeomTool->getPhiDiff(fPhiArray[fFirstAnt[i]],fPhiArray[fSecondAnt[i]]);
+    Double_t fNewPhi=fPhiArray[fSecondAnt[i]]+0.5*fPhiDiff;
+    if(fNewPhi<0) fNewPhi+=TMath::TwoPi();
+    if(fNewPhi>=TMath::TwoPi()) fNewPhi-=TMath::TwoPi();
+    fPairPhiCentre[i]=fNewPhi;
+
+    std::cout << "Pair " << i << "\t" << TMath::RadToDeg()*fPairPhiCentre[i] << "\n";
+  }
+
+  Double_t phiStepDeg=360/NUM_PHI_BINS;
+  for(int phiBin=0;phiBin<NUM_PHI_BINS;phiBin++) {
+    fNumPairsByPhi[phiBin]=0;
+    Double_t phiDeg=phiBin*phiStepDeg;
+    Double_t phiLow=phiDeg-fPhiWidthDeg;
+    Double_t phiHigh=phiDeg+fPhiWidthDeg;
+    if(phiLow<0) phiLow+=360;
+    if(phiHigh>=360) phiHigh-=360;
+    
+    for(int pair=0;pair<fNumPairs;pair++) {
+      Double_t pairDeg=fPairPhiCentre[pair]*TMath::RadToDeg();
+      if(phiLow<phiHigh) {
+	if(pairDeg>=phiLow && pairDeg<=phiHigh) {
+	  fPairListByPhi[phiBin][fNumPairsByPhi[phiBin]]=pair;
+	  fNumPairsByPhi[phiBin]++;
+	}
+      }
+      else {
+	if(pairDeg>=phiLow || pairDeg<=phiHigh) {
+	  fPairListByPhi[phiBin][fNumPairsByPhi[phiBin]]=pair;
+	  fNumPairsByPhi[phiBin]++;
+	}
+      }	  	  
+    }
+    std::cout << phiBin << "\t" << fNumPairsByPhi[phiBin] << "\t";
+    for(int pair=0;pair<fNumPairsByPhi[phiBin];pair++) {
+      std::cout << TMath::RadToDeg()*fPairPhiCentre[fPairListByPhi[phiBin][pair]] << " ";
+    }
+    std::cout << "\n";
+
+  }
+
   std::cout << "Setup " << fNumPairs << " antenna pairs out of " << NUM_PAIRS << "\n";
 
   //Not sure how to make this bit look less crap
@@ -119,10 +166,26 @@ void AnitaSimpleIntImageMaker::fillDeltaTArrays()
 
       for(int pair=0;pair<fNumPairs;pair++) {
 	fDeltaT[pair][phiInd][thetaInd]=getDeltaTExpected(fFirstAnt[pair],fSecondAnt[pair],fPhiWave[phiInd],fThetaWave[thetaInd]);
+	fSampleOffset[pair][phiInd][thetaInd]=getSampleOffsetExpected(fFirstAnt[pair],fSecondAnt[pair],fPhiWave[phiInd],fThetaWave[thetaInd]);
       }
     }
   }
 	 
+}
+
+Int_t AnitaSimpleIntImageMaker::getSampleOffsetExpected(Int_t ant1, Int_t ant2, Double_t phiWaveRad, Double_t thetaWaveRad)
+{
+
+   Double_t tanThetaW=TMath::Tan(thetaWaveRad);
+   
+   //   if(tanThetaW>1000) tanThetaW=1000; // Just a little check
+   Double_t part1=fZArray[ant1]*tanThetaW - fRArray[ant1] * TMath::Cos(phiWaveRad-fPhiArray[ant1]);
+   Double_t part2=fZArray[ant2]*tanThetaW - fRArray[ant2] * TMath::Cos(phiWaveRad-fPhiArray[ant2]);
+   
+   Double_t tdiff=1e9*((TMath::Cos(thetaWaveRad) * (part1 - part2))/TMath::C());    //returns time in ns
+   
+   tdiff/=NOMINAL_SAMPLING;
+   return TMath::Nint(tdiff);
 }
 
 Double_t AnitaSimpleIntImageMaker::getDeltaTExpected(Int_t ant1, Int_t ant2, Double_t phiWaveRad, Double_t thetaWaveRad)
@@ -136,10 +199,14 @@ Double_t AnitaSimpleIntImageMaker::getDeltaTExpected(Int_t ant1, Int_t ant2, Dou
    
    Double_t tdiff=1e9*((TMath::Cos(thetaWaveRad) * (part1 - part2))/TMath::C());    //returns time in ns
    
+   //   tdiff/=NOMINAL_SAMPLING;
+   //   tdiff=NOMINAL_SAMPLING*TMath::Nint(tdiff);
+
    //   std::cerr << tanThetaW << "\t" << tdiff << "\n";
+
+   
+
    return tdiff;
-
-
 }
 
 
@@ -147,8 +214,18 @@ Double_t AnitaSimpleIntImageMaker::getDeltaTExpected(Int_t ant1, Int_t ant2, Dou
 TH2D *AnitaSimpleIntImageMaker::getInterferometricMap(UsefulAnitaEvent *usefulEvent,AnitaPol::AnitaPol_t pol)
 {
 
+#ifdef MAKE_DEBUG_FILE
+  TFile *fpTemp = new TFile("temp.root","RECREATE");
+  char histName[180];
+  TH2D *histTemp[NUM_PAIRS];
+  for(int pair=0;pair<fNumPairs;pair++) {
+    sprintf(histName,"histTemp_%d_%d",fFirstAnt[pair],fSecondAnt[pair]);
+    histTemp[pair] = new TH2D(histName,histName,360,-0.5,359.5,180,-90.5,89.5);
+  }
+#endif
+
   Double_t scale=1./fPairsPerPhiSector;
-  TH2D *histMap = new TH2D("histMap","histMap",NUM_PHI_BINS,-180,180,NUM_THETA_BINS,-90,90);
+  TH2D *histMap = new TH2D("histMap","histMap",NUM_PHI_BINS,0,360,NUM_THETA_BINS,-90,90);
 
   TGraph *grRaw[NUM_SEAVEYS]={0};
   TGraph *grInt[NUM_SEAVEYS]={0};
@@ -160,6 +237,7 @@ TH2D *AnitaSimpleIntImageMaker::getInterferometricMap(UsefulAnitaEvent *usefulEv
     if(ant>=32) continue;
     grRaw[ant]=usefulEvent->getGraph(ant,pol);
     grInt[ant]=FFTtools::getInterpolatedGraph(grRaw[ant],1./2.6);
+    //    grInt[ant]=getPretendInterpolated(grRaw[ant],1./2.6);
     grNorm[ant]=getNormalisedGraph(grInt[ant]);
   }
 
@@ -167,7 +245,7 @@ TH2D *AnitaSimpleIntImageMaker::getInterferometricMap(UsefulAnitaEvent *usefulEv
   for(int pair=0;pair<fNumPairs;pair++) {
     int ant1=fFirstAnt[pair];
     int ant2=fSecondAnt[pair];
-    grCor[pair]=FFTtools::getCorrelationGraph(grNorm[ant1],grNorm[ant2]);
+    grCor[pair]=FFTtools::getCorrelationGraph(grNorm[ant1],grNorm[ant2],&fZeroOffset[pair]);
   }
 
      
@@ -179,17 +257,28 @@ TH2D *AnitaSimpleIntImageMaker::getInterferometricMap(UsefulAnitaEvent *usefulEv
       //Could just use TH2::GetBin(binx,biny) but the below should be faster
       Int_t globalBin=(phiBin+1)+(thetaBin+1)*(NUM_PHI_BINS+2);
       
-      for(int pairInd=0;pairInd<fPairsPerPhiSector;pairInd++) {
-	Int_t whichPair=fPairList[whichPhi][pairInd];
-	if(whichPair == -1) {	  
-	  std::cout << phiBin << "\t" << thetaBin << "\t" << whichPhi << "\t" << pairInd << "\t" << whichPair << "\n";
-	  exit(0);
-	}
+      scale=1./fNumPairsByPhi[phiBin];
+      for(int pairInd=0;pairInd<fNumPairsByPhi[phiBin];pairInd++) {
+	Int_t whichPair=fPairListByPhi[phiBin][pairInd];
+	    //      for(int pairInd=0;pairInd<fPairsPerPhiSector;pairInd++) {
+	    //      	Int_t whichPair=fPairList[whichPhi][pairInd];
+// 	if(whichPair == -1) {	  
+// 	  std::cout << phiBin << "\t" << thetaBin << "\t" << whichPhi << "\t" << pairInd << "\t" << whichPair << "\n";
+// 	  exit(0);
+// 	}
 	Double_t dt=fDeltaT[whichPair][phiBin][thetaBin];
-	Double_t corVal=fastEvalForEvenSampling(grCor[whichPair],dt);
+
+	//	Double_t corVal=fastEvalForEvenSampling(grCor[whichPair],dt);
+	Double_t corVal=fakeEvalSampleOffset(grCor[whichPair],fSampleOffset[whichPair][phiBin][thetaBin],fZeroOffset[whichPair]);
+	//	Double_t corVal=grCor[whichPair]->Eval(dt);
 	corVal*=scale;
 	Double_t binVal=histMap->GetBinContent(globalBin);
+	//	if(whichPair==0)
 	histMap->SetBinContent(globalBin,binVal+corVal);	
+#ifdef MAKE_DEBUG_FILE
+	Double_t tempVal=histTemp[whichPair]->GetBinContent(globalBin);
+	histTemp[whichPair]->SetBinContent(globalBin,tempVal+corVal);
+#endif
       }
     }
   }
@@ -202,6 +291,11 @@ TH2D *AnitaSimpleIntImageMaker::getInterferometricMap(UsefulAnitaEvent *usefulEv
   for(int i=0;i<fNumPairs;i++) {
     if(grCor[i]) delete grCor[i];
   }
+
+#ifdef MAKE_DEBUG_FILE
+  fpTemp->Write();
+  fpTemp->Close();
+#endif
 
   return histMap;
 }
@@ -249,5 +343,39 @@ Int_t AnitaSimpleIntImageMaker::getPhiSector(Double_t phiWaveDeg)
     if(phiWaveDeg< 11.25 + (phi-1)*22.5)
       return phi;
   }
+  return 0;
+}
+
+
+TGraph* AnitaSimpleIntImageMaker::getPretendInterpolated(TGraph *grIn, Double_t deltaT)
+{
+  Double_t *xVals = grIn->GetX();
+  Double_t *yVals = grIn->GetY();
+  Int_t numPoints = grIn->GetN();
+  Double_t *newX = new Double_t [numPoints];
+  for(int i=0;i<numPoints;i++) {
+    newX[i]=xVals[0]+i*deltaT;
+  }
+  TGraph *grOut = new TGraph(numPoints,newX,yVals);
+  delete [] newX;
+  return grOut;
+}
+
+
+Double_t AnitaSimpleIntImageMaker::fakeEvalSampleOffset(TGraph *grIn, Int_t xvalue, Int_t zeroOffset)
+{
+  Int_t numPoints=grIn->GetN();
+  //  std::cout << numPoints << "\n";
+  if(numPoints<2) return 0;
+  Double_t *xVals=grIn->GetX();
+  Double_t *yVals=grIn->GetY();
+  //  Double_t dx=xVals[1]-xVals[0];
+  //  if(dx<=0) return 0;
+
+  //  Int_t p0=Int_t((0-xVals[0])/dx);
+  Int_t p0=zeroOffset;
+  p0+=xvalue;
+  if(p0>=0 && p0<numPoints)
+    return yVals[p0];
   return 0;
 }

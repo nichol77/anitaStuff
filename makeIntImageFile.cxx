@@ -107,8 +107,8 @@ void makeIntImageFile(int run, int numEnts, const char *baseDir, const char *out
      headTree->GetEntry(entry);
 
      //Now cut to only process the Taylor Dome pulses
-     if( (header->triggerTimeNs>3e6 || header->triggerTimeNs<1e5) )
-       continue; 
+     //     if( (header->triggerTimeNs>3e6 || header->triggerTimeNs<1e5) )
+     //       continue; 
 
      
      //Get event
@@ -127,7 +127,7 @@ void makeIntImageFile(int run, int numEnts, const char *baseDir, const char *out
      TH2D *map = imageMaker->getInterferometricMap(realEvent,AnitaPol::kVertical);
      sprintf(histName,"histMapV_%d",realEvent->eventNumber);
      map->SetNameTitle(histName,histName);
-     map->Write();
+     //     map->Write();
      delete map;
   }
   fpOut->Close();

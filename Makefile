@@ -7,7 +7,7 @@ include Makefile.arch
 
 #Site Specific  Flags
 SYSINCLUDES	=
-SYSLIBS         = 
+SYSLIBS         = -L/home/rjn/thirdParty/lib -lprofiler
 DLLSUF = ${DllSuf}
 OBJSUF = ${ObjSuf}
 SRCSUF = ${SrcSuf}

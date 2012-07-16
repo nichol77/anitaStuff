@@ -33,6 +33,7 @@ class AnitaSimpleIntImageMaker : public TObject
    void fillAntennaPairs();
    void fillDeltaTArrays();
    Double_t getDeltaTExpected(Int_t ant1, Int_t ant2, Double_t phiWaveRad, Double_t thetaWaveRad);
+   Int_t getSampleOffsetExpected(Int_t ant1, Int_t ant2, Double_t phiWaveRad, Double_t thetaWaveRad);
 
    TH2D *getInterferometricMap(UsefulAnitaEvent *usefulEvent,AnitaPol::AnitaPol_t pol=AnitaPol::kVertical);
 
@@ -42,9 +43,10 @@ class AnitaSimpleIntImageMaker : public TObject
    static AnitaSimpleIntImageMaker *fgInstance;  
    // protect against multiple instances
 
-
+   static TGraph* getPretendInterpolated(TGraph *grIn, Double_t deltaT=1./2.6);
    static TGraph* getNormalisedGraph(TGraph *grIn);
    static Double_t fastEvalForEvenSampling(TGraph *grIn, Double_t xvalue);
+   static Double_t fakeEvalSampleOffset(TGraph *grIn, Int_t xvalue, Int_t zeroOffset);
    static Int_t getPhiSector(Double_t phiWaveDeg);
 
 
@@ -54,15 +56,22 @@ class AnitaSimpleIntImageMaker : public TObject
    Double_t fThetaWave[NUM_PHI_BINS];
 
 
+   Double_t fPhiWidthDeg;
+
    Int_t fNumPairs;
    Int_t fFirstAnt[NUM_PAIRS];
    Int_t fSecondAnt[NUM_PAIRS];
+   Int_t fZeroOffset[NUM_PAIRS];
+   Double_t fPairPhiCentre[NUM_PAIRS];
+   Int_t fPairListByPhi[NUM_PHI_BINS][NUM_PAIRS];
+   Int_t fNumPairsByPhi[NUM_PHI_BINS];
 
    Int_t fPairsPerPhiSector;
    Int_t fPairList[PHI_SECTORS][7];
      
 
    Double_t fDeltaT[NUM_PAIRS][NUM_PHI_BINS][NUM_THETA_BINS];
+   Int_t fSampleOffset[NUM_PAIRS][NUM_PHI_BINS][NUM_THETA_BINS];
 
    Double_t fZArray[NUM_SEAVEYS];
    Double_t fRArray[NUM_SEAVEYS];
